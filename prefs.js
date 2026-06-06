@@ -933,7 +933,6 @@ const DockSettings = GObject.registerClass({
         });
 
         // Appearance Panel
-
         this._settings.bind('apply-custom-theme',
             this._builder.get_object('customize_theme'),
             'sensitive',
@@ -946,6 +945,15 @@ const DockSettings = GObject.registerClass({
             this._builder.get_object('shrink_dash_switch'),
             'active',
             Gio.SettingsBindFlags.DEFAULT);
+        // GNOME 3 Style Combo
+        this._builder.get_object('dock_style_combo').set_active(
+            this._settings.get_enum('dock-style'));
+        this._builder.get_object('dock_style_combo').connect(
+            'changed',
+            widget => {
+                this._settings.set_enum('dock-style', widget.get_active());
+            }
+        );
 
         // Running indicators
         this._builder.get_object('running_indicators_combo').set_active(

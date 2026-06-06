@@ -38,7 +38,11 @@
     <value value='1' nick='FIXED'/>
     <value value='3' nick='DYNAMIC'/>
   </enum>
-    <enum id='org.gnome.shell.extensions.dash-to-dock.running-indicator-style'>
+  <enum id='org.gnome.shell.extensions.dash-to-dock.dock-style'>
+    <value value='0' nick='DEFAULT'/>
+    <value value='1' nick='GNOME3'/>
+  </enum>  
+  <enum id='org.gnome.shell.extensions.dash-to-dock.running-indicator-style'>
     <value value='0' nick='DEFAULT'/>
     <value value='1' nick='DOTS'/>
     <value value='2' nick='SQUARES'/>
@@ -190,6 +194,11 @@
       <default>false</default>
       <summary>Apply custom theme</summary>
       <description>Apply customization to the dash appearance</description>
+    </key>
+    <key name="dock-style" enum="org.gnome.shell.extensions.dash-to-dock.dock-style">
+      <default>'DEFAULT'</default>
+      <summary>Dock style mode</summary>
+      <description>Select a dock theming mode.</description>
     </key>
     <key type="b" name="custom-theme-shrink">
       <default>false</default>
@@ -616,7 +625,7 @@
       <description>Emulate the unity7 backlit glossy items behaviour</description>
     </key>
     <key name="apply-glossy-effect" type="b">
-      <default>true</default>
+      <default>false</default>
       <summary>Enable glossy effect</summary>
       <description>Toggle the glossy effect of the unity7 backlit feature.</description>
     </key>

@@ -517,3 +517,55 @@ $dock_style_modes: null, shrink, extended, extended-shrink;
         background-size: contain;
     }
 }
+
+/* GNOME 3 alike style */
+#dashtodockContainer.gnome3-style #dash .dash-background {
+    spacing: 0px;
+}
+
+#dashtodockContainer.gnome3-style.bottom #dash .dash-background {
+    border-radius: $dash_border_radius $dash_border_radius 0 0;
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+#dashtodockContainer.gnome3-style.top #dash .dash-background {
+    border-radius: 0 0 $dash_border_radius $dash_border_radius;
+    border-top: none;
+    margin-top: 0;
+}
+
+#dashtodockContainer.gnome3-style.left #dash .dash-background {
+    border-radius: 0 $dash_border_radius $dash_border_radius 0;
+    border-left: none;
+    margin-left: 0;
+}
+
+#dashtodockContainer.gnome3-style.right #dash .dash-background {
+    border-radius: $dash_border_radius 0 0 $dash_border_radius;
+    border-right: none;
+    margin-right: 0;
+}
+
+#dashtodockContainer.gnome3-style.shrink.bottom #dash .dash-background {
+    border-radius: shrink_light($dash_border_radius) shrink_light($dash_border_radius) 0 0;
+}
+
+#dashtodockContainer.gnome3-style.shrink.top #dash .dash-background {
+    border-radius: 0 0 shrink_light($dash_border_radius) shrink_light($dash_border_radius);
+}
+
+#dashtodockContainer.gnome3-style.shrink.left #dash .dash-background {
+    border-radius: 0 shrink_light($dash_border_radius) shrink_light($dash_border_radius) 0;
+}
+
+#dashtodockContainer.gnome3-style.shrink.right #dash .dash-background {
+    border-radius: shrink_light($dash_border_radius) 0 0 shrink_light($dash_border_radius);
+}
+
+// Keep hover spacing symmetric in GNOME 3 style shrink mode.
+#dashtodockContainer.gnome3-style.shrink #dash .dash-item-container .app-well-app,
+#dashtodockContainer.gnome3-style.shrink #dash .dash-item-container .show-apps,
+#dashtodockContainer.gnome3-style.shrink #dash .dash-item-container .overview-tile {
+    padding: shrink($dash_padding);
+}

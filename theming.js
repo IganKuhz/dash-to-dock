@@ -8,7 +8,7 @@ import {
     St,
 } from './dependencies/gi.js';
 
-import {Main} from './dependencies/shell/ui.js';
+import { Main } from './dependencies/shell/ui.js';
 
 import {
     Docking,
@@ -26,6 +26,11 @@ const TransparencyMode = {
     DEFAULT:  0,
     FIXED:    1,
     DYNAMIC:  3,
+};
+
+const DockStyle = {
+    DEFAULT: 0,
+    GNOME3:  1,
 };
 
 const Labels = Object.freeze({
@@ -225,6 +230,11 @@ export class ThemeManager {
         else
             this._actor.remove_style_class_name('running-dots');
 
+        if (settings.dockStyle === DockStyle.GNOME3)
+            this._actor.add_style_class_name('gnome3-style');
+        else
+            this._actor.remove_style_class_name('gnome3-style');
+
         // If not the built-in theme option is not selected
         if (!settings.applyCustomTheme) {
             if (settings.forceStraightCorner)
@@ -312,6 +322,7 @@ export class ThemeManager {
             'apply-custom-theme',
             'custom-theme-shrink',
             'custom-theme-running-dots',
+            'dock-style',
             'extend-height',
             'force-straight-corner'];
 
