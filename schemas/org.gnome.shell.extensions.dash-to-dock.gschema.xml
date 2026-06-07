@@ -295,6 +295,11 @@
       <summary>Wiggle urgent applications</summary>
       <description>Wiggle urgent application icons in the dash</description>
     </key>
+    <key type="b" name="animate-application-icons">
+      <default>true</default>
+      <summary>Animate application icons</summary>
+      <description>Play animations on application icons when launching, minimizing, or restoring windows.</description>
+    </key>
     <key type="b" name="show-show-apps-button">
       <default>true</default>
       <summary>Show applications button</summary>

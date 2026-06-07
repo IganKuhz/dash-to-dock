@@ -35,7 +35,7 @@ import {
     WindowPreview,
 } from './imports.js';
 
-import {Extension} from './dependencies/shell/extensions/extension.js';
+import { Extension } from './dependencies/shell/extensions/extension.js';
 
 // Use __ () and N__() for the extension gettext domain, and reuse
 // the shell domain with the default _() and N_()
@@ -74,6 +74,33 @@ const scrollAction = Object.freeze({
 
 // module "Dash" did not export DASH_ITEM_LABEL_SHOW_TIME, so let's define it.
 const DASH_ITEM_LABEL_SHOW_TIME = Dash.DASH_ITEM_LABEL_SHOW_TIME ?? 150;
+
+
+// Minimize animation was changed from 100ms to 150ms in GNOME 44.
+// Restore animation was changed from 150ms to 200ms in GNOME 44.
+// Let's use the new values to have a consistent animation speed.
+const MINIMIZE_ANIMATION = {
+    motionScale: 0.93,
+    crossScale: 1.035,
+    reboundMotionScale: 1.014,
+    reboundCrossScale: 0.994,
+    translationDirection: -1,
+    durationIn: 115,
+    durationRebound: 155,
+    durationSettle: 245,
+}
+
+// Restore animation is slower, so let's make the overall animation slower too.
+const RESTORE_ANIMATION = {
+    motionScale: 1.07,
+    crossScale: 0.972,
+    reboundMotionScale: 0.988,
+    reboundCrossScale: 1.008,
+    translationDirection: 1,
+    durationIn: 135,
+    durationRebound: 175,
+    durationSettle: 275,
+}
 
 let recentlyClickedAppLoopId = 0;
 let recentlyClickedApp = null;
@@ -544,6 +571,9 @@ export const DockAbstractAppIcon = GObject.registerClass({
         // We check if the app is running, and that the # of windows is > 0 in
         // case we use workspace isolation.
         const windows = this.getInterestingWindows();
+        // Fallback for apps whose focus state updates a frame late after launch.
+        // If this regresses, revert these checks to `this.focused` only.
+        const hasFocusedWindow = windows.some(window => window.has_focus());
 
         // Some action modes (e.g. MINIMIZE_OR_OVERVIEW) require overview to remain open
         // This variable keeps track of this
@@ -574,7 +604,7 @@ export const DockAbstractAppIcon = GObject.registerClass({
                     }
                 } else {
                     const [w] = windows;
-                    Main.activateWindow(w);
+                    this._activateWindowFromClick(w);
                 }
                 break;
 
@@ -585,14 +615,14 @@ export const DockAbstractAppIcon = GObject.registerClass({
                 // (no modifiers, no middle click).
                 if (singleOrUrgentWindows && !modifiers && button === 1) {
                     const [w] = windows;
-                    if (this.focused) {
+                    if (this.focused || hasFocusedWindow) {
                         if (buttonAction !== clickAction.FOCUS_OR_APP_SPREAD) {
                             // Window is raised, minimize it
                             this._minimizeWindow(w);
                         }
                     } else {
                         // Window is minimized, raise it
-                        Main.activateWindow(w);
+                        this._activateWindowFromClick(w);
                     }
                     // Launch overview when multiple windows are present
                     // TODO: only show current app windows when gnome shell API will allow it
@@ -609,7 +639,7 @@ export const DockAbstractAppIcon = GObject.registerClass({
                     } else {
                         // Activate the first window
                         const [w] = windows;
-                        Main.activateWindow(w);
+                        this._activateWindowFromClick(w);
                     }
                 } else {
                     this.app.activate();
@@ -623,7 +653,7 @@ export const DockAbstractAppIcon = GObject.registerClass({
                 } else {
                     // Activate the first window
                     const [w] = windows;
-                    Main.activateWindow(w);
+                    this._activateWindowFromClick(w);
                 }
                 break;
 
@@ -636,7 +666,7 @@ export const DockAbstractAppIcon = GObject.registerClass({
                 } else {
                     // Activate the first window
                     const [w] = windows;
-                    Main.activateWindow(w);
+                    this._activateWindowFromClick(w);
                 }
                 break;
 
@@ -651,7 +681,7 @@ export const DockAbstractAppIcon = GObject.registerClass({
                     // (no modifiers, no middle click).
                     if (singleOrUrgentWindows && !modifiers && button === 1) {
                         const [w] = windows;
-                        Main.activateWindow(w);
+                        this._activateWindowFromClick(w);
                     } else {
                         this._windowPreviews();
                     }
@@ -668,12 +698,12 @@ export const DockAbstractAppIcon = GObject.registerClass({
                 if (!Main.overview.visible) {
                     if (singleOrUrgentWindows && !modifiers && button === 1) {
                         const [w] = windows;
-                        if (this.focused) {
+                        if (this.focused || hasFocusedWindow) {
                             // Window is raised, minimize it
                             this._minimizeWindow(w);
                         } else {
                             // Window is minimized, raise it
-                            Main.activateWindow(w);
+                            this._activateWindowFromClick(w);
                         }
                     } else {
                         // Launch previews when multiple windows are present
@@ -688,9 +718,9 @@ export const DockAbstractAppIcon = GObject.registerClass({
                 if (this.focused && !singleOrUrgentWindows && !modifiers && button === 1) {
                     shouldHideOverview = false;
                     Docking.DockManager.getDefault().appSpread.toggle(this.app);
-                } else {
+                } else if (!(this.focused || hasFocusedWindow)) {
                     // Activate the first window
-                    Main.activateWindow(windows[0]);
+                    this._activateWindowFromClick(windows[0]);
                 }
                 break;
 
@@ -698,9 +728,9 @@ export const DockAbstractAppIcon = GObject.registerClass({
                 if (this.focused && !singleOrUrgentWindows && !modifiers && button === 1) {
                     shouldHideOverview = false;
                     Docking.DockManager.getDefault().appSpread.toggle(this.app);
-                } else if (!this.focused) {
+                } else if (!(this.focused || hasFocusedWindow)) {
                     // Activate the first window
-                    Main.activateWindow(windows[0]);
+                    this._activateWindowFromClick(windows[0]);
                 } else {
                     this._minimizeWindow();
                 }
@@ -711,7 +741,7 @@ export const DockAbstractAppIcon = GObject.registerClass({
                 break;
 
             case clickAction.SKIP:
-                Main.activateWindow(windows[0]);
+                this._activateWindowFromClick(windows[0]);
                 break;
             }
         } else {
@@ -756,6 +786,182 @@ export const DockAbstractAppIcon = GObject.registerClass({
             this._previewMenu.popup();
 
         return false;
+    }
+
+    _getBounceAxisInfo() {
+    switch (Utils.getPosition()) {
+        case St.Side.LEFT:
+            return {
+                property: "translation_x",
+                orthogonalProperty: "translation_y",
+                direction: 1,
+            }
+        case St.Side.RIGHT:
+            return {
+                property: "translation_x",
+                orthogonalProperty: "translation_y",
+                direction: -1,
+            }
+        case St.Side.TOP:
+            return {
+                property: "translation_y",
+                orthogonalProperty: "translation_x",
+                direction: 1,
+            }
+        case St.Side.BOTTOM:
+        default:
+            return {
+                property: "translation_y",
+                orthogonalProperty: "translation_x",
+                direction: -1,
+            }
+        }
+    }
+
+        _getClickAnimationAxisInfo() {
+        const axisInfo = this._getBounceAxisInfo()
+        return {
+            ...axisInfo,
+            isHorizontalMotion: axisInfo.property === "translation_x",
+        }
+    }
+
+    _animateClickSpring(options) {
+    const iconBin = this.icon?._iconBin
+    if (!iconBin) return
+
+    const axisInfo = this._getClickAnimationAxisInfo()
+    const iconSize = Math.max( iconBin.width, iconBin.height, this.icon.iconSize ?? 0, 16 )
+    const translationRatio = options.translationRatio ?? 0.045
+    const translationDistance = Math.max(1, Math.round(iconSize * translationRatio))
+    const firstTranslation = Math.round(
+        axisInfo.direction * options.translationDirection * translationDistance,
+    )
+    const reboundFactor = options.reboundTranslationFactor ?? -0.32
+    const reboundTranslation = Math.round(firstTranslation * reboundFactor)
+
+    const firstScaleX = axisInfo.isHorizontalMotion
+        ? options.motionScale
+        : options.crossScale
+    const firstScaleY = axisInfo.isHorizontalMotion
+        ? options.crossScale
+        : options.motionScale
+    const reboundScaleX = axisInfo.isHorizontalMotion
+        ? options.reboundMotionScale
+        : options.reboundCrossScale
+    const reboundScaleY = axisInfo.isHorizontalMotion
+        ? options.reboundCrossScale
+        : options.reboundMotionScale
+
+    iconBin.remove_all_transitions()
+    iconBin.set_pivot_point(0.5, 0.5)
+    iconBin.ease({
+        [axisInfo.property]: firstTranslation,
+        scale_x: firstScaleX,
+        scale_y: firstScaleY,
+        duration: options.durationIn,
+        mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+        onComplete: () => {
+        iconBin.ease({
+            [axisInfo.property]: reboundTranslation,
+            scale_x: reboundScaleX,
+            scale_y: reboundScaleY,
+            duration: options.durationRebound,
+            mode: Clutter.AnimationMode.EASE_IN_OUT_CUBIC,
+            onComplete: () => {
+            iconBin.ease({
+                [axisInfo.property]: 0,
+                scale_x: 1,
+                scale_y: 1,
+                duration: options.durationSettle,
+                mode: Clutter.AnimationMode.EASE_OUT_QUART,
+            })
+            },
+        })
+        },
+    })
+    }
+
+    // Animation options for minimize/restore windows
+    _animateMinimizeClick() {
+        if (!Docking.DockManager.settings.animateApplicationIcons) return
+        this._animateClickSpring(MINIMIZE_ANIMATION)
+    }
+
+    _animateRestoreClick() {
+        if (!Docking.DockManager.settings.animateApplicationIcons) return
+        this._animateClickSpring(RESTORE_ANIMATION)
+    }
+
+    animateLaunch() {
+        super.animateLaunch()
+        this._animateLaunchBounce()
+    }
+
+    _animateLaunchBounce() {
+        const settings = Docking.DockManager.settings
+        if (!settings.animateApplicationIcons || this.urgent) return
+
+        const icon = this.icon?._iconBin
+        if (!icon) return
+
+        const iconSize = Math.max(icon.width, icon.height, this.icon.iconSize ?? 0, 16)
+        const bounceDistance = Math.max(2, Math.round(iconSize * 0.20))
+        const secondBounceDistance = Math.max(1, Math.round(bounceDistance * 0.45))
+        const overshootDistance = Math.max(1, Math.round(bounceDistance * 0.08))
+
+        const bounceDuration = 560
+        const firstRise = Math.round(bounceDuration * 0.25)   // 140ms
+        const firstFall = Math.round(bounceDuration * 0.21)   // 118ms
+        const secondRise = Math.round(bounceDuration * 0.20)  // 112ms
+        const settle = bounceDuration - firstRise - firstFall - secondRise // 190ms
+
+        const axisInfo = this._getBounceAxisInfo()
+        const prop = axisInfo.property
+        // direction already points away from the dock (towards screen center)
+        const bounceDir = axisInfo.direction
+        const firstScaleMotion = axisInfo.isHorizontalMotion ? 0.95 : 1.05
+        const firstScaleCross = axisInfo.isHorizontalMotion ? 1.03 : 0.97
+        const reboundScaleMotion = axisInfo.isHorizontalMotion ? 1.01 : 0.99
+        const reboundScaleCross = axisInfo.isHorizontalMotion ? 0.99 : 1.01
+
+        icon.remove_all_transitions()
+        icon.set_pivot_point(0.5, 0.5)
+
+        icon.ease({
+            [prop]: bounceDir * bounceDistance,
+            scale_x: firstScaleMotion,
+            scale_y: firstScaleCross,
+            duration: firstRise,
+            mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+            onComplete: () => {
+                icon.ease({
+                    [prop]: -bounceDir * overshootDistance,
+                    scale_x: reboundScaleMotion,
+                    scale_y: reboundScaleCross,
+                    duration: firstFall,
+                    mode: Clutter.AnimationMode.EASE_IN_OUT_CUBIC,
+                    onComplete: () => {
+                        icon.ease({
+                            [prop]: bounceDir * secondBounceDistance,
+                            scale_x: firstScaleMotion,
+                            scale_y: firstScaleCross,
+                            duration: secondRise,
+                            mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+                            onComplete: () => {
+                                icon.ease({
+                                    [prop]: 0,
+                                    scale_x: 1,
+                                    scale_y: 1,
+                                    duration: settle,
+                                    mode: Clutter.AnimationMode.EASE_OUT_QUART,
+                                })
+                            },
+                        })
+                    },
+                })
+            },
+        })
     }
 
     // Try to do the right thing when attempting to launch a new window of an app. In
@@ -836,9 +1042,11 @@ export const DockAbstractAppIcon = GObject.registerClass({
         // Param true make all app windows minimize
         const windows = this.getInterestingWindows();
         const currentWorkspace = global.workspace_manager.get_active_workspace();
+        let shouldAnimate = false
         for (let i = 0; i < windows.length; i++) {
             const w = windows[i];
             if (w.get_workspace() === currentWorkspace && w.showing_on_its_workspace()) {
+                shouldAnimate = true
                 w.minimize();
                 // Just minimize one window. By specification it should be the
                 // focused window on the current workspace.
@@ -846,6 +1054,20 @@ export const DockAbstractAppIcon = GObject.registerClass({
                     break;
             }
         }
+                
+        if (shouldAnimate) this._animateMinimizeClick()
+    }
+
+    // This is a workaround for the fact that we can't easily know whether the window
+    // is already minimized from the click event. animateLaunch is called
+    // on the click event, _minimizeWindow after the animation is finished.
+    _activateWindowFromClick(window) {
+    if (!window) return
+
+    const isMinimized = window.minimized
+    if (isMinimized) this._animateRestoreClick()
+    
+    Main.activateWindow(window)
     }
 
     // By default only non minimized windows are activated.
