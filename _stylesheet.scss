@@ -491,6 +491,11 @@ $dock_style_modes: null, shrink, extended, extended-shrink;
     margin: 2px;
 }
 
+#dashtodockContainer .dash-item-container.trash-drop-hover .overview-icon {
+    background-color: rgba(232, 64, 61, 0.2);
+    box-shadow: inset 0 0 0 1px rgba(232, 64, 61, 0.55);
+}
+
 #dashtodockPreviewSeparator.popup-separator-menu-item-horizontal {
     width: 1px;
     height: auto;

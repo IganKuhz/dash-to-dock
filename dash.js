@@ -340,14 +340,17 @@ export const DockDash = GObject.registerClass({
     }
 
     _onItemDragCancelled(...args) {
+        this._clearTrashDropHover();
         return Dash.Dash.prototype._onItemDragCancelled.call(this, ...args);
     }
 
     _onItemDragEnd(...args) {
+        this._clearTrashDropHover();
         return Dash.Dash.prototype._onItemDragEnd.call(this, ...args);
     }
 
     _endItemDrag(...args) {
+        this._clearTrashDropHover();
         return Dash.Dash.prototype._endItemDrag.call(this, ...args);
     }
 
@@ -379,7 +382,86 @@ export const DockDash = GObject.registerClass({
         return Dash.Dash.prototype._clearEmptyDropTarget.call(this, ...args);
     }
 
+
+    _getDraggedApp(source) {
+        return source?.app ?? source?._delegate?.app ?? source?.child?._delegate?.app ?? null;
+    }
+
+    _canUnpinDraggedFavoriteOnTrash(source) {
+        const app = this._getDraggedApp(source);
+        if (!app?.get_id || app.isTrash)
+            return false;
+
+        const appId = app.get_id();
+        return global.settings.is_writable('favorite-apps') &&
+            AppFavorites.getAppFavorites().isFavorite(appId);
+    }
+
+    _getTrashActor() {
+        try {
+            const children = this._box?.get_children?.() ?? [];
+            return children.find(actor => actor.child?._delegate?.app?.isTrash) ?? null;
+        } catch {
+            return null;
+        }
+    }
+
+    _isPointerOverTrash() {
+        const trashActor = this._getTrashActor();
+        if (!trashActor)
+            return false;
+
+        const [pointerX, pointerY] = global.get_pointer();
+        const [trashX, trashY] = trashActor.get_transformed_position();
+        const [trashWidth, trashHeight] = trashActor.get_transformed_size();
+
+        return pointerX >= trashX &&
+            pointerX <= trashX + trashWidth &&
+            pointerY >= trashY &&
+            pointerY <= trashY + trashHeight;
+    }
+
+    _clearTrashDropHover() {
+        if (this._trashDropHoverActor) {
+            this._trashDropHoverActor.remove_style_class_name('trash-drop-hover');
+            this._trashDropHoverActor = null;
+        }
+    }
+
+    _setTrashDropHover(active) {
+        if (!active) {
+            this._clearTrashDropHover();
+            return;
+        }
+
+        const trashActor = this._getTrashActor();
+        if (!trashActor) {
+            this._clearTrashDropHover();
+            return;
+        }
+
+        if (this._trashDropHoverActor && this._trashDropHoverActor !== trashActor)
+            this._clearTrashDropHover();
+
+        trashActor.add_style_class_name('trash-drop-hover');
+        this._trashDropHoverActor = trashActor;
+    }
+
     handleDragOver(source, actor, x, y, time) {
+        if (this._isPointerOverTrash()) {
+            this._clearDragPlaceholder();
+            this._clearEmptyDropTarget();
+            if (this._canUnpinDraggedFavoriteOnTrash(source)) {
+                this._setTrashDropHover(true);
+                return DND.DragMotionResult.MOVE_DROP;
+            }
+
+            this._setTrashDropHover(false);
+            return DND.DragMotionResult.NO_DROP;
+        }
+
+        this._setTrashDropHover(false);
+
         let ret;
         if (this._isHorizontal) {
             ret = Dash.Dash.prototype.handleDragOver.call(this, source, actor, x, y, time);
@@ -440,8 +522,22 @@ export const DockDash = GObject.registerClass({
         return ret;
     }
 
-    acceptDrop(...args) {
-        return Dash.Dash.prototype.acceptDrop.call(this, ...args);
+    acceptDrop(source, actor, x, y, time) {
+        if (this._isPointerOverTrash()) {
+            if (this._canUnpinDraggedFavoriteOnTrash(source)) {
+                const app = this._getDraggedApp(source);
+                AppFavorites.getAppFavorites().removeFavorite(app.get_id());
+                this._setTrashDropHover(false);
+                return true;
+            }
+
+            this._setTrashDropHover(false);
+            return false;
+        }
+
+        this._setTrashDropHover(false);
+
+        return Dash.Dash.prototype.acceptDrop.call(this, source, actor, x, y, time);
     }
 
     _onWindowDragBegin(...args) {
@@ -449,6 +545,7 @@ export const DockDash = GObject.registerClass({
     }
 
     _onWindowDragEnd(...args) {
+        this._clearTrashDropHover();
         return Dash.Dash.prototype._onWindowDragEnd.call(this, ...args);
     }
 
