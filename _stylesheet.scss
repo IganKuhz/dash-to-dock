@@ -489,6 +489,7 @@ $dock_style_modes: null, shrink, extended, extended-shrink;
     font-weight: bold;
     text-align: center;
     margin: 2px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 #dashtodockContainer .dash-item-container.trash-drop-hover .overview-icon {
