@@ -76,9 +76,9 @@ const scrollAction = Object.freeze({
 const DASH_ITEM_LABEL_SHOW_TIME = Dash.DASH_ITEM_LABEL_SHOW_TIME ?? 150;
 
 
-// Minimize animation was changed from 100ms to 150ms in GNOME 44.
-// Restore animation was changed from 150ms to 200ms in GNOME 44.
-// Let's use the new values to have a consistent animation speed.
+// Minimize/restore use upstream GNOME Shell values (calibrated for GNOME 44+).
+// Focus fixes the original flat rebound (reboundMotionScale was 0.988, never
+// crossing 1.0, making the spring invisible). Everything else is left as-is.
 const MINIMIZE_ANIMATION = {
     motionScale: 0.93,
     crossScale: 1.035,
@@ -90,7 +90,6 @@ const MINIMIZE_ANIMATION = {
     durationSettle: 245,
 }
 
-// Restore animation is slower, so let's make the overall animation slower too.
 const RESTORE_ANIMATION = {
     motionScale: 1.07,
     crossScale: 0.972,
@@ -100,6 +99,21 @@ const RESTORE_ANIMATION = {
     durationIn: 135,
     durationRebound: 175,
     durationSettle: 275,
+}
+
+// Focus: symmetric squish with a visible spring pop.
+// The rebound now crosses 1.0 so the settle phase is actually perceptible.
+const FOCUS_ANIMATION = {
+    motionScale: 0.85,
+    crossScale: 0.88,
+    reboundMotionScale: 1.06,
+    reboundCrossScale: 0.96,
+    translationDirection: -1,
+    translationRatio: 0.03,
+    reboundTranslationFactor: -0.30,
+    durationIn: 95,
+    durationRebound: 140,
+    durationSettle: 200,
 }
 
 let recentlyClickedAppLoopId = 0;
@@ -331,10 +345,12 @@ export const DockAbstractAppIcon = GObject.registerClass({
                 const windows = this.getInterestingWindows();
                 if (windows.length > 0) {
                     const [w] = windows;
-                    Main.activateWindow(w);
+                    this._activateWindowFromClick(w);
                 }
             }
         } else {
+            if (!this.focused)
+                this._animateFocusClick();
             this.app.activate();
         }
         return Clutter.EVENT_STOP;
@@ -474,7 +490,7 @@ export const DockAbstractAppIcon = GObject.registerClass({
             this._menu = new DockAppIconMenu(this);
             this._menu.connect('activate-window', (menu, window) => {
                 if (window) {
-                    Main.activateWindow(window);
+                    this._activateWindowFromClick(window);
                 } else {
                     Main.overview.hide();
                     Main.panel.closeCalendar();
@@ -571,9 +587,6 @@ export const DockAbstractAppIcon = GObject.registerClass({
         // We check if the app is running, and that the # of windows is > 0 in
         // case we use workspace isolation.
         const windows = this.getInterestingWindows();
-        // Fallback for apps whose focus state updates a frame late after launch.
-        // If this regresses, revert these checks to `this.focused` only.
-        const hasFocusedWindow = windows.some(window => window.has_focus());
 
         // Some action modes (e.g. MINIMIZE_OR_OVERVIEW) require overview to remain open
         // This variable keeps track of this
@@ -615,7 +628,7 @@ export const DockAbstractAppIcon = GObject.registerClass({
                 // (no modifiers, no middle click).
                 if (singleOrUrgentWindows && !modifiers && button === 1) {
                     const [w] = windows;
-                    if (this.focused || hasFocusedWindow) {
+                    if (this.focused) {
                         if (buttonAction !== clickAction.FOCUS_OR_APP_SPREAD) {
                             // Window is raised, minimize it
                             this._minimizeWindow(w);
@@ -642,6 +655,8 @@ export const DockAbstractAppIcon = GObject.registerClass({
                         this._activateWindowFromClick(w);
                     }
                 } else {
+                    if (!this.focused)
+                        this._animateFocusClick();
                     this.app.activate();
                 }
                 break;
@@ -686,6 +701,8 @@ export const DockAbstractAppIcon = GObject.registerClass({
                         this._windowPreviews();
                     }
                 } else {
+                    if (!this.focused)
+                        this._animateFocusClick();
                     this.app.activate();
                 }
                 break;
@@ -698,7 +715,7 @@ export const DockAbstractAppIcon = GObject.registerClass({
                 if (!Main.overview.visible) {
                     if (singleOrUrgentWindows && !modifiers && button === 1) {
                         const [w] = windows;
-                        if (this.focused || hasFocusedWindow) {
+                        if (this.focused) {
                             // Window is raised, minimize it
                             this._minimizeWindow(w);
                         } else {
@@ -710,6 +727,8 @@ export const DockAbstractAppIcon = GObject.registerClass({
                         this._windowPreviews();
                     }
                 } else {
+                    if (!this.focused)
+                        this._animateFocusClick();
                     this.app.activate();
                 }
                 break;
@@ -718,7 +737,7 @@ export const DockAbstractAppIcon = GObject.registerClass({
                 if (this.focused && !singleOrUrgentWindows && !modifiers && button === 1) {
                     shouldHideOverview = false;
                     Docking.DockManager.getDefault().appSpread.toggle(this.app);
-                } else if (!(this.focused || hasFocusedWindow)) {
+                } else if (!this.focused) {
                     // Activate the first window
                     this._activateWindowFromClick(windows[0]);
                 }
@@ -728,7 +747,7 @@ export const DockAbstractAppIcon = GObject.registerClass({
                 if (this.focused && !singleOrUrgentWindows && !modifiers && button === 1) {
                     shouldHideOverview = false;
                     Docking.DockManager.getDefault().appSpread.toggle(this.app);
-                } else if (!(this.focused || hasFocusedWindow)) {
+                } else if (!this.focused) {
                     // Activate the first window
                     this._activateWindowFromClick(windows[0]);
                 } else {
@@ -893,6 +912,11 @@ export const DockAbstractAppIcon = GObject.registerClass({
         this._animateClickSpring(RESTORE_ANIMATION)
     }
 
+    _animateFocusClick() {
+        if (!Docking.DockManager.settings.animateApplicationIcons) return
+        this._animateClickSpring(FOCUS_ANIMATION)
+    }
+
     animateLaunch() {
         super.animateLaunch()
         this._animateLaunchBounce()
@@ -983,7 +1007,7 @@ export const DockAbstractAppIcon = GObject.registerClass({
             // spinning icon is shown and disappears only after a timeout.
             const windows = this.getWindows();
             if (windows.length > 0) {
-                Main.activateWindow(windows[0]);
+                this._activateWindowFromClick(windows[0]);
             } else {
                 this.app.activate();
                 this.animateLaunch();
@@ -1065,7 +1089,11 @@ export const DockAbstractAppIcon = GObject.registerClass({
     if (!window) return
 
     const isMinimized = window.minimized
-    if (isMinimized) this._animateRestoreClick()
+    if (isMinimized) {
+        this._animateRestoreClick()
+    } else if (!window.has_focus()) {
+        this._animateFocusClick()
+    }
     
     Main.activateWindow(window)
     }
@@ -1079,6 +1107,8 @@ export const DockAbstractAppIcon = GObject.registerClass({
             !Docking.DockManager.settings.isolateMonitors) {
             if (!this.running)
                 this.animateLaunch();
+            else if (!this.focused)
+                this._animateFocusClick();
             this.app.activate();
         }
 
@@ -1140,7 +1170,7 @@ export const DockAbstractAppIcon = GObject.registerClass({
         const index = recentlyClickedAppIndex % recentlyClickedAppWindows.length;
         const window = recentlyClickedAppWindows[index];
 
-        Main.activateWindow(window);
+        this._activateWindowFromClick(window);
     }
 
     _resetRecentlyClickedApp() {
